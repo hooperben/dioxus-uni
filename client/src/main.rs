@@ -9,13 +9,25 @@ fn main() {
     dioxus::launch(App);
 }
 
+#[derive(Routable, Clone, PartialEq)]
+enum Route {
+    #[route("/")]
+    App,
+}
+
+#[component]
+fn Data() -> Element {
+    rsx! {
+        p {"hello!"}
+    }
+}
+
 #[component]
 fn App() -> Element {
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS } document::Link { rel: "stylesheet", href: TAILWIND_CSS }
         Hero {}
-        Echo {}
     }
 }
 
@@ -67,6 +79,12 @@ fn Echo() -> Element {
 /// Echo the user input on the server.
 #[server(EchoServer)]
 async fn echo_server(input: String) -> Result<String, ServerFnError> {
+    println!("server: {}", input);
+    Ok(input)
+}
+
+#[server(Endpoint, "/data")]
+async fn endpoint(input: String) -> Result<String, ServerFnError> {
     println!("server: {}", input);
     Ok(input)
 }

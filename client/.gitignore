@@ -7,3 +7,6 @@
 **/*.rs.bk
 
 node_modules
+
+server-key.pem
+other-server-key.pem

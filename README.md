@@ -16,13 +16,15 @@ bun install
 # start tailwind
 bun run dev
 
-# start the front end
+# start the web app
 dx serve
 ```
 
 ### Deployment
 
-I've currently been deploying dioxus to vercel - but full disclaimer I have absolutely no idea what it's security is. This is just testing full stack dev in rust more than anything.
+I spun up an EC2 instance, to SSH:
+
+ssh -i server-key.pem -o StrictHostKeyChecking=no ubuntu@3.92.1.71
 
 ### Testing
 
@@ -33,3 +35,5 @@ from root:
 ```
 cargo test
 ```
+
+I
