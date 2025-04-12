@@ -1,4 +1,4 @@
-# Uni V2 in Dioxus
+# Uni V2 in Dioxus/Rust Server
 
 trying some uni v2 stuff in dioxus (dioxus is like if nextjs and rust had a baby).
 
@@ -7,33 +7,31 @@ i'm using bun for dev because it's fast - you can use whatever package you'd lik
 ### Development
 
 ```
-# install deps
+# install tailwind/js components
+cd client
 bun install
 
 ## NOTE ##
 # you need 2 terminals to run this thing in dev (well, at the moment anyway)
 
-# start tailwind
+# start tailwind (in client/)
 bun run dev
 
-# start the web app
+# start the web app (client/)
 dx serve
+
+# start the rust server
+cd ../server && cargo run
 ```
 
 ### Deployment
 
-I spun up an EC2 instance, to SSH:
+I deployed the server to an EC2 instance. ssh:
 
+```
 ssh -i server-key.pem -o StrictHostKeyChecking=no ubuntu@3.92.1.71
+```
 
 ### Testing
 
-To test the functions needed for uni v2, you can run cargo test command
-
-from root:
-
-```
-cargo test
-```
-
-I
+TODO
