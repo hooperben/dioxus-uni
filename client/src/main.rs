@@ -9,82 +9,32 @@ fn main() {
     dioxus::launch(App);
 }
 
-#[derive(Routable, Clone, PartialEq)]
-enum Route {
-    #[route("/")]
-    App,
-}
-
-#[component]
-fn Data() -> Element {
-    rsx! {
-        p {"hello!"}
-    }
-}
-
 #[component]
 fn App() -> Element {
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS } document::Link { rel: "stylesheet", href: TAILWIND_CSS }
-        Hero {}
+        document::Link { rel: "stylesheet", href: MAIN_CSS }
+        document::Link { rel: "stylesheet", href: TAILWIND_CSS }
+        SwapForm {}
     }
 }
 
 #[component]
-pub fn Hero() -> Element {
-    rsx! {
-        div {
-            id: "hero",
-            img { src: HEADER_SVG, id: "header" }
-            div { id: "links",
-                a { href: "https://dioxuslabs.com/learn/0.6/", "📚 Learn Dioxus" }
-                a { href: "https://dioxuslabs.com/awesome", "🚀 Awesome Dioxus" }
-                a { href: "https://github.com/dioxus-community/", "📡 Community Libraries" }
-                a { href: "https://github.com/DioxusLabs/sdk", "⚙️ Dioxus Development Kit" }
-                a { href: "https://marketplace.visualstudio.com/items?itemName=DioxusLabs.dioxus", "💫 VSCode Extension" }
-                a { href: "https://discord.gg/XgGxMSkvUM", "👋 Community Discord" }
-            }
-        }
-    }
-}
+pub fn SwapForm() -> Element {
+    let mut pool_address = use_signal(|| "".to_string());
+    let mut token_in = use_signal(|| String::new());
+    let mut token_out = use_signal(|| String::new());
+    let mut amount_in = use_signal(|| String::new());
 
-/// Echo component that demonstrates fullstack server functions.
-#[component]
-fn Echo() -> Element {
-    let mut response = use_signal(|| String::new());
+    let mut name = use_signal(|| "bob".to_string());
 
     rsx! {
-        div {
-            id: "echo",
-            h4 { "ServerFn Echo" }
-            input {
-                placeholder: "Type here to echo...",
-                oninput:  move |event| async move {
-                    let data = echo_server(event.value()).await.unwrap();
-                    response.set(data);
-                },
-            }
-
-            if !response().is_empty() {
-                p {
-                    "Server echoed: "
-                    i { "{response}" }
-                }
-            }
+        input {
+            class: "text-black",
+            // we tell the component what to render
+            value: "{name}",
+            // and what to do when the value changes
+            oninput: move |event| name.set(event.value())
         }
     }
-}
-
-/// Echo the user input on the server.
-#[server(EchoServer)]
-async fn echo_server(input: String) -> Result<String, ServerFnError> {
-    println!("server: {}", input);
-    Ok(input)
-}
-
-#[server(Endpoint, "/data")]
-async fn endpoint(input: String) -> Result<String, ServerFnError> {
-    println!("server: {}", input);
-    Ok(input)
 }

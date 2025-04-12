@@ -3,7 +3,7 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "build": "dx build && tailwindcss -i ./input.css -o ./assets/tailwind.css && cp -R target/dx/dioxus-uni/debug/web/public dist/",
+    "build": "tailwindcss -i ./input.css -o ./assets/tailwind.css && cp -R target/dx/client/debug/web/public dist/",
     "dev": "tailwindcss -i ./input.css -o ./assets/tailwind.css --watch"
   },
   "devDependencies": {

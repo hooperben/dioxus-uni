@@ -1,5 +1,5 @@
 [package]
-name = "dioxus-uni"
+name = "client"
 version = "0.1.0"
 authors = ["benhooper <ben@labrys.io>"]
 edition = "2021"
@@ -7,8 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dioxus = { version = "0.6.0", features = ["router", "fullstack"] }
-pretty_assertions = "1.4.1"
+dioxus = { version = "0.6.0", features = [] }
 
 [features]
 default = ["web"]
