@@ -1,5 +1,9 @@
+use alloy::primitives::{Address, Uint};
 use axum::{extract::Query, response::Json};
 use serde::{Deserialize, Serialize};
+
+mod helpers;
+use helpers::uni_v2::get_output_amount;
 
 // input parameters for the /estimate route
 #[derive(Deserialize)]
@@ -16,13 +20,14 @@ struct Response {
     pool: Option<String>,
     src: Option<String>,
     dst: Option<String>,
-    src_amount: Option<String>,
+    amount_out: Option<String>,
+    error: Option<String>,
 }
 
 #[tokio::main]
 async fn main() {
     // Build our application with a single route.
-    let app = axum::Router::new().route("/estimate", axum::routing::get(handler));
+    let app = axum::Router::new().route("/estimate", axum::routing::get(estimate_handler));
 
     // Run our application as a hyper server on http://localhost:1337.
     let listener = tokio::net::TcpListener::bind("0.0.0.0:1337").await.unwrap();
@@ -30,14 +35,77 @@ async fn main() {
 }
 
 // Handler that extracts query parameters and returns JSON
-async fn handler(Query(params): Query<Params>) -> Json<Response> {
-    let response = Response {
-        pool: params.pool,
-        src: params.src,
-        dst: params.dst,
-        src_amount: params.src_amount,
+async fn estimate_handler(Query(params): Query<Params>) -> Json<Response> {
+    // Check if required parameters are provided
+    if params.pool.is_none()
+        || params.src.is_none()
+        || params.dst.is_none()
+        || params.src_amount.is_none()
+    {
+        return Json(Response {
+            pool: params.pool,
+            src: params.src,
+            dst: params.dst,
+            amount_out: None,
+            error: Some("Missing required parameters".to_string()),
+        });
+    }
+
+    // Try to parse addresses and amount
+    let parse_result = || -> Result<(Address, Address, Address, Uint<256, 4>), String> {
+        let pool_address = params
+            .pool
+            .as_ref()
+            .unwrap()
+            .parse::<Address>()
+            .map_err(|e| format!("Invalid pool address: {}", e))?;
+
+        let src_address = params
+            .src
+            .as_ref()
+            .unwrap()
+            .parse::<Address>()
+            .map_err(|e| format!("Invalid source address: {}", e))?;
+
+        let dst_address = params
+            .dst
+            .as_ref()
+            .unwrap()
+            .parse::<Address>()
+            .map_err(|e| format!("Invalid destination address: {}", e))?;
+
+        let amount_in = Uint::<256, 4>::from_str_radix(params.src_amount.as_ref().unwrap(), 10)
+            .map_err(|e| format!("Invalid amount: {}", e))?;
+
+        Ok((pool_address, src_address, dst_address, amount_in))
     };
 
-    // Return as JSON
-    Json(response)
+    match parse_result() {
+        Ok((pool_address, src_address, dst_address, amount_in)) => {
+            // Call get_output_amount function
+            match get_output_amount(pool_address, src_address, dst_address, amount_in).await {
+                Ok(output) => Json(Response {
+                    pool: Some(output.pool.to_string()),
+                    src: Some(output.src.to_string()),
+                    dst: Some(output.dst.to_string()),
+                    amount_out: Some(output.amount_out.to_string()),
+                    error: None,
+                }),
+                Err(e) => Json(Response {
+                    pool: params.pool,
+                    src: params.src,
+                    dst: params.dst,
+                    amount_out: None,
+                    error: Some(e.to_string()),
+                }),
+            }
+        }
+        Err(e) => Json(Response {
+            pool: params.pool,
+            src: params.src,
+            dst: params.dst,
+            amount_out: None,
+            error: Some(e),
+        }),
+    }
 }

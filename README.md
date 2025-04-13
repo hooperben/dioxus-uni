@@ -34,4 +34,13 @@ ssh -i server-key.pem -o StrictHostKeyChecking=no ubuntu@3.92.1.71
 
 ### Testing
 
-TODO
+to run tests:
+
+```
+# in server/
+
+cargo test
+
+# with printlns showing
+cargo test -- --nocapture
+```
