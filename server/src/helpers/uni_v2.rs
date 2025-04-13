@@ -61,14 +61,15 @@ pub async fn get_output_amount(
         y = pool_reserves.reserve0;
     }
 
+    println!("token0 symbol: {}", token0_symbol);
+    println!("token1 symbol: {}", token1_symbol);
+
     // Fee is 0.3%, so r = 0.997
     let fee = Uint::<112, 2>::from(997);
     let fee_base = Uint::<112, 2>::from(1000);
 
-    // we also need to remove the decimals from out input amount
-    let decimal_factor = Uint::from(10).pow(Uint::from(token0_decimals));
     // Convert amount_in to a value without decimals
-    let amount_in_without_exp = amount_in.div_ceil(decimal_factor);
+    let amount_in_without_exp = amount_in; // Don't remove decimals from amount_in
 
     // Convert the Uint<256, 4> to Uint<112, 2>
     // We need to ensure the value fits within 112 bits
@@ -87,6 +88,10 @@ pub async fn get_output_amount(
         ])
     };
 
+    println!("amount_in_112: {}", amount_in_112);
+    println!("x (input reserve): {}", x);
+    println!("y (output reserve): {}", y);
+
     // Calculate output amount using the formula: Δy = (y * r * Δx) / (x + r * Δx)
     let numerator = y
         .checked_mul(fee)
@@ -94,29 +99,43 @@ pub async fn get_output_amount(
         .ok_or("Multiplication overflow in numerator calculation")?;
 
     let denominator = x
+        .checked_mul(fee_base)
+        .ok_or("Multiplication overflow")?
         .checked_add(
             fee.checked_mul(amount_in_112)
                 .ok_or("Multiplication overflow")?,
         )
         .ok_or("Addition overflow in denominator calculation")?;
 
+    println!("numerator: {}", numerator);
+    println!("denominator: {}", denominator);
+
     let amount_out_raw = numerator
         .checked_div(denominator)
         .ok_or("Division error in output amount calculation")?;
 
+    println!("amount_out_raw: {}", amount_out_raw);
+
     // Convert the output amount back to include decimals
-    let dst_decimal_factor = Uint::from(10).pow(Uint::from(token1_decimals));
-    let amount_out = Uint::<256, 4>::from(amount_out_raw) * dst_decimal_factor;
+    // No need to multiply by decimals if we didn't remove them earlier
+    let output_amount = Uint::<256, 4>::from(amount_out_raw);
 
     println!("{}", amount_in);
     println!("{}", amount_in_without_exp);
-    println!("Output amount: {}", amount_out_raw);
+
+    println!("{}", output_amount);
+
+    // now we convert to human numbers
+    let output_amount_exp = Uint::from(10).pow(Uint::from(token1_decimals));
+    let amount_out = output_amount
+        .checked_div(output_amount_exp)
+        .ok_or("Amount out div failure");
 
     let output = OutputAmountParameters {
         pool: pool_address,
         src: src_address,
         dst: dst_address,
-        amount_out: amount_out,
+        amount_out: amount_out?,
     };
 
     Ok(output)
@@ -129,11 +148,13 @@ mod uni_v2_test {
     #[tokio::test]
     async fn test_success_case() -> Result<(), Box<dyn std::error::Error>> {
         let pool_address: Address = "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852".parse()?;
-        let src_address = "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse()?;
-        let dst_address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".parse()?;
+        let src_address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".parse()?;
+        let dst_address = "0xdac17f958d2ee523a2206206994597c13d831ec7".parse()?;
         let amount = Uint::<256, 4>::from_str_radix("1000000000000000000", 10)?;
 
         let result = get_output_amount(pool_address, src_address, dst_address, amount).await?;
+
+        println!("{}", result.amount_out);
 
         Ok(())
     }
