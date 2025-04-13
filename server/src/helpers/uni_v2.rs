@@ -43,11 +43,11 @@ pub async fn get_output_amount(
     let token0_contract = IUniswapV2ERC20::new(token0, &provider);
     let token1_contract = IUniswapV2ERC20::new(token1, &provider);
 
-    let token0_pool_balance = token0_contract.balanceOf(pool_address).call().await?;
-    let token0_decimals = token0_contract.decimals().call().await?;
+    // let token0_pool_balance = token0_contract.balanceOf(pool_address).call().await?;
+    // let token0_decimals = token0_contract.decimals().call().await?;
     let token0_symbol = token0_contract.symbol().call().await?;
 
-    let token1_pool_balance_dst = token1_contract.balanceOf(pool_address).call().await?;
+    // let token1_pool_balance_dst = token1_contract.balanceOf(pool_address).call().await?;
     let token1_decimals = token1_contract.decimals().call().await?;
     let token1_symbol = token1_contract.symbol().call().await?;
 
@@ -71,8 +71,9 @@ pub async fn get_output_amount(
     // Convert amount_in to a value without decimals
     let amount_in_without_exp = amount_in; // Don't remove decimals from amount_in
 
-    // Convert the Uint<256, 4> to Uint<112, 2>
+    // Converting the Uint<256, 4> to Uint<112, 2>
     // We need to ensure the value fits within 112 bits
+
     // Check if higher limbs have any non-zero values
     let is_too_large = amount_in_without_exp.as_limbs()[2] != 0
         || amount_in_without_exp.as_limbs()[3] != 0
@@ -92,17 +93,25 @@ pub async fn get_output_amount(
     println!("x (input reserve): {}", x);
     println!("y (output reserve): {}", y);
 
-    // Calculate output amount using the formula: Δy = (y * r * Δx) / (x + r * Δx)
-    let numerator = y
-        .checked_mul(fee)
-        .and_then(|result| result.checked_mul(amount_in_112))
+    // Calculate output amount using the formula: Δy = (y * r * Δx) / (x * 1000 + Δx * 997)
+    // Convert to Uint<256, 4> for the calculation to avoid overflow
+    let y_256 = Uint::<256, 4>::from(y);
+    let x_256 = Uint::<256, 4>::from(x);
+    let fee_256 = Uint::<256, 4>::from(fee);
+    let fee_base_256 = Uint::<256, 4>::from(fee_base);
+    let amount_in_256 = Uint::<256, 4>::from(amount_in_112);
+
+    let numerator = y_256
+        .checked_mul(fee_256)
+        .and_then(|result| result.checked_mul(amount_in_256))
         .ok_or("Multiplication overflow in numerator calculation")?;
 
-    let denominator = x
-        .checked_mul(fee_base)
+    let denominator = x_256
+        .checked_mul(fee_base_256)
         .ok_or("Multiplication overflow")?
         .checked_add(
-            fee.checked_mul(amount_in_112)
+            fee_256
+                .checked_mul(amount_in_256)
                 .ok_or("Multiplication overflow")?,
         )
         .ok_or("Addition overflow in denominator calculation")?;
@@ -114,28 +123,28 @@ pub async fn get_output_amount(
         .checked_div(denominator)
         .ok_or("Division error in output amount calculation")?;
 
-    println!("amount_out_raw: {}", amount_out_raw);
-
-    // Convert the output amount back to include decimals
-    // No need to multiply by decimals if we didn't remove them earlier
-    let output_amount = Uint::<256, 4>::from(amount_out_raw);
-
-    println!("{}", amount_in);
-    println!("{}", amount_in_without_exp);
-
-    println!("{}", output_amount);
+    // Convert the output amount (already a Uint<256, 4>)
+    let output_amount = amount_out_raw;
 
     // now we convert to human numbers
-    let output_amount_exp = Uint::from(10).pow(Uint::from(token1_decimals));
-    let amount_out = output_amount
-        .checked_div(output_amount_exp)
-        .ok_or("Amount out div failure");
+    let token1_decimals_uint = Uint::from(token1_decimals);
+    println!("token1 decimals: {}", token1_decimals);
+
+    // Don't apply decimal conversion if output decimals are 0 (unlikely but safe)
+    let amount_out = if token1_decimals > 0 {
+        let output_amount_exp = Uint::from(10).pow(token1_decimals_uint);
+        output_amount
+            .checked_div(output_amount_exp)
+            .ok_or("Amount out div failure")?
+    } else {
+        output_amount
+    };
 
     let output = OutputAmountParameters {
         pool: pool_address,
         src: src_address,
         dst: dst_address,
-        amount_out: amount_out?,
+        amount_out: amount_out,
     };
 
     Ok(output)
@@ -151,6 +160,20 @@ mod uni_v2_test {
         let src_address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".parse()?;
         let dst_address = "0xdac17f958d2ee523a2206206994597c13d831ec7".parse()?;
         let amount = Uint::<256, 4>::from_str_radix("1000000000000000000", 10)?;
+
+        let result = get_output_amount(pool_address, src_address, dst_address, amount).await?;
+
+        println!("{}", result.amount_out);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_success_case_reversed() -> Result<(), Box<dyn std::error::Error>> {
+        let pool_address: Address = "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852".parse()?;
+        let src_address = "0xdac17f958d2ee523a2206206994597c13d831ec7".parse()?;
+        let dst_address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".parse()?;
+        let amount = Uint::<256, 4>::from_str_radix("10000000000", 10)?;
 
         let result = get_output_amount(pool_address, src_address, dst_address, amount).await?;
 
