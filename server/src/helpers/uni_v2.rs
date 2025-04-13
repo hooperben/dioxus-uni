@@ -2,47 +2,121 @@ use crate::helpers::contracts::{IUniswapV2ERC20, IUniswapV2Pair};
 use alloy::primitives::{Address, Uint};
 use alloy::providers::*;
 
-struct OutputAmountParameters {
-    pool: Address,
-    src: Address,
-    dst: Address,
-    amount_out: Uint<256, 4>,
+pub struct OutputAmountParameters {
+    pub pool: Address,
+    pub src: Address,
+    pub dst: Address,
+    pub amount_out: Uint<256, 4>,
 }
 
 pub async fn get_output_amount(
     pool_address: Address,
     src_address: Address,
     dst_address: Address,
+    amount_in: Uint<256, 4>,
 ) -> Result<OutputAmountParameters, Box<dyn std::error::Error>> {
+    // TODO ENV this
     let rpc_url = "https://eth-mainnet.g.alchemy.com/v2/ywt4Fdhun2J3lH0hX5YPXqaXiBAusUxG";
-
     let provider = ProviderBuilder::new().connect(rpc_url).await?;
 
+    // first we create the pool instance
     let pool_contract = IUniswapV2Pair::new(pool_address, &provider);
-    let src_contract = IUniswapV2ERC20::new(src_address, &provider);
-    let dst_contract = IUniswapV2ERC20::new(dst_address, &provider);
 
-    // get ERC20 balances of pool address
-    let pool_balance_src = src_contract.balanceOf(pool_address).call().await?;
-    let src_decimals = src_contract.decimals().call().await?;
-    let src_symbol = src_contract.symbol().call().await?; // optional
+    // to avoid any unnecessary calls, we should check that the pools token0 & token1 fields are
+    // equal to our src_address and dst_address inputs, if revert if otherwise
+    let token0 = pool_contract.token0().call().await?;
+    let token1 = pool_contract.token1().call().await?;
 
-    let pool_balance_dst = dst_contract.balanceOf(pool_address).call().await?;
-    let dst_decimals = dst_contract.decimals().call().await?;
-    let dst_symbol = dst_contract.symbol().call().await?; // optional
+    if !((token0 == src_address && token1 == dst_address)
+        || (token0 == dst_address && token1 == src_address))
+    {
+        return Err(format!("Incorrect Pool for {} and {}", src_address, dst_address).into());
+    }
 
+    // now we know it's a pool, we can perform the calculation
+    // next we need to get our X and Y values, and assign them to token0 and token1
     let pool_reserves = pool_contract.getReserves().call().await?;
 
-    println!("{:?}", pool_reserves.reserve0.to_string());
-    println!("{:?}", pool_reserves.reserve1.to_string());
+    let x: Uint<112, 2>;
+    let y: Uint<112, 2>;
 
-    // get x and y values from pool
+    let token0_contract = IUniswapV2ERC20::new(token0, &provider);
+    let token1_contract = IUniswapV2ERC20::new(token1, &provider);
+
+    let token0_pool_balance = token0_contract.balanceOf(pool_address).call().await?;
+    let token0_decimals = token0_contract.decimals().call().await?;
+    let token0_symbol = token0_contract.symbol().call().await?;
+
+    let token1_pool_balance_dst = token1_contract.balanceOf(pool_address).call().await?;
+    let token1_decimals = token1_contract.decimals().call().await?;
+    let token1_symbol = token1_contract.symbol().call().await?;
+
+    let is_token0_src_token = token0 == src_address;
+
+    if is_token0_src_token {
+        x = pool_reserves.reserve0;
+        y = pool_reserves.reserve1;
+    } else {
+        x = pool_reserves.reserve1;
+        y = pool_reserves.reserve0;
+    }
+
+    // Fee is 0.3%, so r = 0.997
+    let fee = Uint::<112, 2>::from(997);
+    let fee_base = Uint::<112, 2>::from(1000);
+
+    // we also need to remove the decimals from out input amount
+    let decimal_factor = Uint::from(10).pow(Uint::from(token0_decimals));
+    // Convert amount_in to a value without decimals
+    let amount_in_without_exp = amount_in.div_ceil(decimal_factor);
+
+    // Convert the Uint<256, 4> to Uint<112, 2>
+    // We need to ensure the value fits within 112 bits
+    // Check if higher limbs have any non-zero values
+    let is_too_large = amount_in_without_exp.as_limbs()[2] != 0
+        || amount_in_without_exp.as_limbs()[3] != 0
+        || (amount_in_without_exp.as_limbs()[1] & (!((1 << 48) - 1))) != 0;
+
+    let amount_in_112: Uint<112, 2> = if is_too_large {
+        return Err("Amount too large for Uint<112, 2>".into());
+    } else {
+        // Safe to convert since we've checked the bounds
+        Uint::<112, 2>::from_limbs([
+            amount_in_without_exp.as_limbs()[0],
+            amount_in_without_exp.as_limbs()[1] & ((1 << 48) - 1), // Only use lower 48 bits of second limb
+        ])
+    };
+
+    // Calculate output amount using the formula: Δy = (y * r * Δx) / (x + r * Δx)
+    let numerator = y
+        .checked_mul(fee)
+        .and_then(|result| result.checked_mul(amount_in_112))
+        .ok_or("Multiplication overflow in numerator calculation")?;
+
+    let denominator = x
+        .checked_add(
+            fee.checked_mul(amount_in_112)
+                .ok_or("Multiplication overflow")?,
+        )
+        .ok_or("Addition overflow in denominator calculation")?;
+
+    let amount_out_raw = numerator
+        .checked_div(denominator)
+        .ok_or("Division error in output amount calculation")?;
+
+    // Convert the output amount back to include decimals
+    let dst_decimal_factor = Uint::from(10).pow(Uint::from(token1_decimals));
+    let amount_out = Uint::<256, 4>::from(amount_out_raw) * dst_decimal_factor;
+
+    println!("{}", amount_in);
+    println!("{}", amount_in_without_exp);
+    println!("Output amount: {}", amount_out_raw);
 
     let output = OutputAmountParameters {
         pool: pool_address,
         src: src_address,
         dst: dst_address,
-        amount_out: pool_balance_dst, // TODO wrong
+        amount_out: amount_out,
     };
 
     Ok(output)
@@ -57,10 +131,30 @@ mod uni_v2_test {
         let pool_address: Address = "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852".parse()?;
         let src_address = "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse()?;
         let dst_address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".parse()?;
+        let amount = Uint::<256, 4>::from_str_radix("1000000000000000000", 10)?;
 
-        let result = get_output_amount(pool_address, src_address, dst_address).await?;
-        // assert_eq!(result, Uint::<256, 4>::from(4u8)); // Convert integer to proper Uint type
+        let result = get_output_amount(pool_address, src_address, dst_address, amount).await?;
 
         Ok(())
     }
+
+    // #[tokio::test]
+    // async fn test_incorrect_pool_address() -> Result<(), Box<dyn std::error::Error>> {
+    //     let pool_address: Address = "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1851".parse()?;
+    //     let src_address = "0xdAC17F958D2ee523a2206206994597C13D831ec7".parse()?;
+    //     let dst_address = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".parse()?;
+    //     let amount = Uint::<256, 4>::from_str_radix("1000000000000000000", 10)?;
+
+    //     let result = get_output_amount(pool_address, src_address, dst_address, amount).await;
+
+    //     assert!(result.is_err(), "Expected an error for incorrect pool");
+    //     if let Err(e) = result {
+    //         assert!(
+    //             e.to_string().contains("Incorrect Pool"),
+    //             "Error message should mention 'Incorrect Pool'"
+    //         );
+    //     }
+
+    //     Ok(())
+    // }
 }
