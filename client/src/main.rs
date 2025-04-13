@@ -33,7 +33,11 @@ pub fn SwapForm() -> Element {
     let mut token_out = use_signal(|| "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_string());
     let mut amount_in = use_signal(|| "10000000".to_string());
 
+    let mut expected_output = use_signal(|| "".to_string());
+
     let get_quote = move |_| async move {
+        expected_output.set("".to_string());
+
         let url = format!(
             "https://uni-v2.hooper.link/estimate?pool={}&src={}&dst={}&src_amount={}",
             pool_address, token_in, token_out, amount_in
@@ -53,17 +57,12 @@ pub fn SwapForm() -> Element {
 
         tracing::info!("{}", response.amount_out);
 
-        // Placeholder for the actual HTTP request:
-        // use_future(async move {
-        //     let resp = reqwest::get(&url).await?;
-        //     let text = resp.text().await?;
-        //     Ok::<_, reqwest::Error>(text)
-        // });
+        expected_output.set(response.amount_out);
     };
 
     rsx! {
         div { class: "flex flex-col gap-4 p-4 max-w-md mx-auto",
-            h2 { class: "text-xl font-bold mb-4", "Swap Form" }
+            h2 { class: "text-xl font-bold mb-4", "Uni V2 Expected Output Calculator" }
 
             label { "Pool Address:" }
             input {
@@ -86,7 +85,7 @@ pub fn SwapForm() -> Element {
                 oninput: move |event| token_out.set(event.value())
             }
 
-            label { "Amount In:" }
+            label { "Amount In (as exp):" }
             input {
                 class: "text-black p-2 border rounded",
                 value: "{amount_in}",
@@ -97,6 +96,14 @@ pub fn SwapForm() -> Element {
                 class: "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4",
                 onclick: get_quote,
                 "Get Quote"
+            }
+
+            if expected_output.to_string() != "".to_string() {
+                div {
+                    class: "flex w-full bg-blue-400 rounded-full text-black p-4",
+                     "Expected Output: {expected_output}"
+
+                }
             }
         }
     }
