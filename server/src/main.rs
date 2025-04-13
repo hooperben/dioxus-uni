@@ -1,5 +1,6 @@
 use axum;
 use clap::Parser;
+use tower_http::cors::{Any, CorsLayer};
 
 mod handlers;
 mod helpers;
@@ -17,9 +18,16 @@ async fn main() {
     // Parse command-line arguments
     let args = Args::parse();
 
-    // Build our application with a single route.
-    let app =
-        axum::Router::new().route("/estimate", axum::routing::get(handlers::estimate_handler));
+    // Configure CORS middleware to allow all origins
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    // Build our application with a single route and CORS middleware
+    let app = axum::Router::new()
+        .route("/estimate", axum::routing::get(handlers::estimate_handler))
+        .layer(cors);
 
     // Run our application as a hyper server on the specified port
     let addr = format!("0.0.0.0:{}", args.port);
