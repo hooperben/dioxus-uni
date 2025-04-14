@@ -68,12 +68,10 @@ pub async fn get_output_amount(
     let fee = Uint::<112, 2>::from(997);
     let fee_base = Uint::<112, 2>::from(1000);
 
-    // Convert amount_in to a value without decimals
-    let amount_in_without_exp = amount_in; // Don't remove decimals from amount_in
+    // We'll need to convert amount_in to a value without decimals
+    let amount_in_without_exp: Uint<256, 4> = amount_in;
 
-    // Converting the Uint<256, 4> to Uint<112, 2>
     // We need to ensure the value fits within 112 bits
-
     // Check if higher limbs have any non-zero values
     let is_too_large = amount_in_without_exp.as_limbs()[2] != 0
         || amount_in_without_exp.as_limbs()[3] != 0
@@ -93,7 +91,6 @@ pub async fn get_output_amount(
     println!("x (input reserve): {}", x);
     println!("y (output reserve): {}", y);
 
-    // Calculate output amount using the formula: Δy = (y * r * Δx) / (x * 1000 + Δx * 997)
     // Convert to Uint<256, 4> for the calculation to avoid overflow
     let y_256 = Uint::<256, 4>::from(y);
     let x_256 = Uint::<256, 4>::from(x);
@@ -101,6 +98,7 @@ pub async fn get_output_amount(
     let fee_base_256 = Uint::<256, 4>::from(fee_base);
     let amount_in_256 = Uint::<256, 4>::from(amount_in_112);
 
+    // Calculate output amount using the formula: Δy = (y * r * Δx) / (x + r * Δx)
     let numerator = y_256
         .checked_mul(fee_256)
         .and_then(|result| result.checked_mul(amount_in_256))
@@ -181,7 +179,7 @@ mod uni_v2_test {
 
         Ok(())
     }
-
+    // commented out as it was breaking - TODO fix
     // #[tokio::test]
     // async fn test_incorrect_pool_address() -> Result<(), Box<dyn std::error::Error>> {
     //     let pool_address: Address = "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1851".parse()?;
@@ -193,6 +191,7 @@ mod uni_v2_test {
 
     //     assert!(result.is_err(), "Expected an error for incorrect pool");
     //     if let Err(e) = result {
+    //         println!("{}", e);
     //         assert!(
     //             e.to_string().contains("Incorrect Pool"),
     //             "Error message should mention 'Incorrect Pool'"

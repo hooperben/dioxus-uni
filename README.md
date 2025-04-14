@@ -52,6 +52,21 @@ cargo run -- --port 8080
 
 ### Testing
 
+Functions are written after the trade function described in the uni v3 cook book: https://uniswapv3book.com/milestone_0/constant-function-market-maker.html
+
+the trade function:
+
+$$ (x+r\Delta x)(y-\Delta y)=k $$
+
+is tested with differing decimal amounts each way, and seems to match the current price I get in the uniswap UI.
+
+The errors caught (neatly) so far are:
+
+- incorrect parameters (when calling via REST)
+- pool address correct, but src or dst token address incorrect
+
+but most other errors thrown will probably return a potentially ugly error to the user.
+
 to run tests:
 
 ```
