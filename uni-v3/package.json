@@ -1,0 +1,17 @@
+{
+  "name": "uni-v3",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "axios": "^1.9.0",
+    "ethers": "^6.13.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0"
+  }
+}
