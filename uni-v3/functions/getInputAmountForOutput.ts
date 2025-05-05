@@ -16,7 +16,7 @@ export async function getInputAmountForOutput(
   outputAmount: bigint,
 ): Promise<bigint> {
   // Get the best pool
-  const { pool, isTokenAToken0 } = await getBestPoolForPair(
+  const { pool } = await getBestPoolForPair(
     inputTokenAddress,
     outputTokenAddress,
   );
